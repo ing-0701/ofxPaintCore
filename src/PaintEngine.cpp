@@ -27,9 +27,9 @@ void PaintEngine::clearStroke() {
 	strokePointStartIndex = 0;
 }
 
-void PaintEngine::beginStroke(const glm::vec2 & position, ofFbo& canvas) {
+void PaintEngine::beginStroke(const glm::vec2 & position, ofFbo& canvas, float spacingPx) {
 	clearStroke();
-	strokeSampler.beginStroke(position, points);
+	strokeSampler.beginStroke(position, points, spacingPx);
 	// チェックポイントにレイヤー全体を保存
 	// 描画中の線がある程度たまるたびにチェックポイントに追加
 	//描画中の線自体はpreFbo2Dに描かれている

@@ -6,7 +6,12 @@
 namespace paintcore {
 void StrokeSampler::beginStroke(
 	const glm::vec2 & position,
-	std::vector<glm::vec2> & points) {
+	std::vector<glm::vec2> & points,
+	float spacingPx) {
+
+	spacing = std::isfinite(spacingPx) && spacingPx > 0.0f
+		? spacingPx
+		: 3.0f;
 
 	previousInputPoint = position;
 	curveStartPoint = position;
@@ -20,8 +25,6 @@ void StrokeSampler::beginStroke(
 void StrokeSampler::appendPathSample(
 	const glm::vec2 & position,
 	std::vector<glm::vec2>& points) {
-	constexpr float spacing = 3.0f;
-
 	const glm::vec2 delta = position - previousPathSample;
 	const float length = glm::length(delta);
 
@@ -33,8 +36,8 @@ void StrokeSampler::appendPathSample(
 
 	// この小区間の始点から、次の円を置く位置までの距離
 	float nextDistance = spacing - distanceSinceStamp;
-	// distanceSinceStampは3pxを超えるまでこれまでの距離が蓄積する
-	// 例えば過去の三回のステップがそれぞれ0.7px, 0.8px, 0.8px だったならdistanceSinceStampは2.3
+	// distanceSinceStampは指定間隔を超えるまでこれまでの距離が蓄積する
+	// 例えば指定間隔が3.0pxで、過去の三回のステップがそれぞれ0.7px, 0.8px, 0.8px だったならdistanceSinceStampは2.3
 
 	while (nextDistance <= length) {
 		points.push_back(
