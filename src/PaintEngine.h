@@ -18,7 +18,7 @@ public:
 
 	void allocateStrokeBuffers(const ofFbo::Settings & settings);
 
-	void beginStroke(const glm::vec2 & position, ofFbo & canvas);
+	void beginStroke(const glm::vec2 & position, ofFbo & canvas, float spacingPx = 3.0f);
 	void addStrokePoint(const glm::vec2 & position);
 
 	void drawStroke(const BrushSettings & settings);

@@ -9,7 +9,8 @@ class StrokeSampler {
 public:
 	void beginStroke(
 		const glm::vec2 & position,
-		std::vector<glm::vec2> & points);
+		std::vector<glm::vec2> & points,
+		float spacingPx = 3.0f);
 
 	// ドラッグで届いた入力座標を追加する
 	void addStrokePoint(
@@ -35,8 +36,10 @@ private:
 	glm::vec2 curveStartPoint { 0.0f, 0.0f };
 	// 曲線を細かくたどる際の直前の座標
 	glm::vec2 previousPathSample { 0.0f, 0.0f };
-	// 最後に円を置いてから進んだ距離
+	// 最後にブラシを置いてから進んだ距離
 	float distanceSinceStamp = 0.0f;
+	// ブラシの間隔
+	float spacing = 3.0f;
 };
 
 }
