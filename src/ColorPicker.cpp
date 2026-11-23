@@ -56,13 +56,23 @@ void ColorPicker::drawHueSlider() {
 	hue.draw();
 }
 
-void ColorPicker::pick(float x, float y) {
+void ColorPicker::select(float x, float y) {
 	const int localX = static_cast<int>(
 		ofClamp(x - pickerRect.x, 0.0f, SIZE - 1.0f));
 	const int localY = static_cast<int>(
 		ofClamp(y - pickerRect.y, 0.0f, SIZE - 1.0f));
 
 	pickedColor = colorAt(localX, localY);
+    selection = { localX, localY };
+}
+
+void ColorPicker::pick(float x, float y) {
+    select(x, y);
+    drawSelection();
+}
+
+void ColorPicker::drawSelection() const {
+    const float localX = selection.x, localY = selection.y;
 
 	// 選択位置に、現在の色を示す円を表示する
 	ofPushStyle();
@@ -87,6 +97,19 @@ void ColorPicker::pick(float x, float y) {
 
 ofColor ColorPicker::getColor() const {
 	return pickedColor;
+}
+
+void ColorPicker::setColor(const ofColor& color) {
+    pickedColor = color;
+    hue = color.getHue() / 255.0f;
+    selection = {color.getSaturation(), 255.0f - color.getBrightness()};
+    updateTexture();
+}
+void ColorPicker::update() {
+    if (static_cast<float>(hue) != lastHue) {
+        updateTexture();
+        pickedColor = colorAt(static_cast<int>(selection.x), static_cast<int>(selection.y));
+    }
 }
 
 }

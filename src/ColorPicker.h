@@ -15,6 +15,11 @@ public:
 	void pick(float x, float y);
 
 	ofColor getColor() const;
+    void setColor(const ofColor& color);
+    void select(float x, float y);
+    void drawSelection() const;
+    bool contains(float x, float y) const { return pickerRect.inside(x, y); }
+    void update();
 
 private:
 	static constexpr int SIZE = 256;
@@ -26,6 +31,7 @@ private:
 
 	float lastHue = -1.0f;
 	ofColor pickedColor = ofColor::black;
+    glm::vec2 selection { 0, 255 };
 
 	void updateTexture();
 	ofColor colorAt(int x, int y);

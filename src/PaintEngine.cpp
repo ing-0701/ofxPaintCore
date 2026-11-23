@@ -4,6 +4,29 @@
 #include <utility>
 
 namespace paintcore {
+int PaintEngine::setup(const PaintSettings & settings) {
+	if (initialized || !layers.empty()) {
+		throw std::logic_error(
+			"PaintEngine::setup must be called once before adding layers."
+		);
+	}
+
+	const ofFbo::Settings fboSettings = settings.makeFboSettings();
+
+	auto initialLayer = std::make_unique<Layer>(
+		1,
+		"Layer1",
+		settings);
+
+	allocateStrokeBuffers(fboSettings);
+	clearStroke();
+
+	layers.push_back(std::move(initialLayer));
+	strokeChunkSize = std::max<std::size_t>(1, settings.strokeChunkSize);
+	initialized = true;
+	return layers.front()->id;
+}
+
 void PaintEngine::allocateStrokeBuffers(const ofFbo::Settings & settings) {
 	preFbo2D.allocate(settings);
 	strokeCheckpointFbo.allocate(settings);
@@ -29,6 +52,8 @@ void PaintEngine::clearStroke() {
 
 void PaintEngine::beginStroke(const glm::vec2 & position, ofFbo& canvas, float spacingPx) {
 	clearStroke();
+    ++strokeId;
+    stampIndexOffset = 0;
 	strokeSampler.beginStroke(position, points, spacingPx);
 	// チェックポイントにレイヤー全体を保存
 	// 描画中の線がある程度たまるたびにチェックポイントに追加
@@ -41,7 +66,7 @@ void PaintEngine::addStrokePoint(const glm::vec2 & position) {
 }
 
 void PaintEngine::drawPendingPoints(const BrushSettings & settings) const {
-	brush.draw(points, strokePointStartIndex, settings);
+	brush.draw(points, strokePointStartIndex, settings, strokeId, stampIndexOffset);
 }
 
 void PaintEngine::drawStroke(const BrushSettings& settings) {
@@ -77,12 +102,13 @@ void PaintEngine::commitStroke(ofFbo& canvas) {
 }
 
 bool PaintEngine::needsCheckpoints() const {
-	return points.size() - strokePointStartIndex >= STROKE_CHUNK_SIZE;
+	return points.size() - strokePointStartIndex >= strokeChunkSize;
 }
 
 void PaintEngine::checkpointSaved() {
 	// 次の点との補間に使うため、最後の座標だけ残す
 	const glm::vec2 lastPoint = points.back();
+    stampIndexOffset += points.size() - 1;
 	points.clear();
 	points.push_back(lastPoint);
 	// 残した点はすでに画像へ描画済みなので、再描画しない

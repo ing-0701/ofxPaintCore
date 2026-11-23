@@ -5,7 +5,8 @@ namespace paintcore {
 void CanvasRenderer::draw(
 	PaintEngine& engine,
 	int previewLayerId,
-	const DrawLayer& drawLayer) {
+	const DrawLayer& drawLayer,
+    const LayerPlacement& placement) {
 	const auto & layers = engine.getLayers();
 
 	for (auto it = layers.rbegin(); it != layers.rend(); it++) {
@@ -13,13 +14,18 @@ void CanvasRenderer::draw(
 		// layersはスマートポインタの配列だから、各要素をaとすると*aで実際のレイヤーが得られる
 		// すなわち**itが各ループで参照しているレイヤー
 		const Layer & layer = **it;
+        if (!layer.visible || layer.opacity <= 0.0f) continue;
 
 		// 描画中のレイヤーならpreFbo2Dを、そうじゃないなら各レイヤーの内容を描画
 		ofFbo & source = (layer.id == previewLayerId)
 			? engine.getStrokePreview()
 			: (*it)->canvas;
 
+        const auto position = placement ? placement(layer) : layer.position;
+        ofPushMatrix();
+        ofTranslate(position.x, position.y);
 		drawLayer(layer, source);
+        ofPopMatrix();
 	}
 }
 

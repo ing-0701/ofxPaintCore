@@ -3,6 +3,7 @@
 #include "Brush.h"
 #include "StrokeSampler.h"
 #include "PaintLayer.h"
+#include "PaintSettings.h"
 
 #include <memory>
 #include <cstddef>
@@ -34,9 +35,11 @@ public:
 	std::unique_ptr<Layer> takeLayerAt(int index);
 	void moveLayer(int layerId, int destinationIndex);
 
+	int setup(const PaintSettings & settings = PaintSettings {});
+
 private:
 	// この数の未保存点がたまったら途中保存する
-	static constexpr std::size_t STROKE_CHUNK_SIZE = 10;
+	std::size_t strokeChunkSize = 10;
 
 	StrokeSampler strokeSampler;
 	std::vector<glm::vec2> points;
@@ -45,6 +48,8 @@ private:
 	// 0：先頭から描く
 	// 1：先頭は接続用の点なので、描かずに飛ばす
 	std::size_t strokePointStartIndex = 0;
+    std::uint64_t strokeId = 0;
+    std::uint64_t stampIndexOffset = 0;
 
 	// 最新の部分が描かれる方
 	ofFbo preFbo2D;
@@ -56,6 +61,8 @@ private:
 	bool needsCheckpoints() const;
 	void checkpointSaved();
 	std::vector<std::unique_ptr<Layer>> layers;
+
+	bool initialized = false;
 };
 
 }
