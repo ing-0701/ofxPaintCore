@@ -4,6 +4,8 @@
 
 namespace paintcore {
 
+// ソフト全体の設定
+// 縦横比、色形式、履歴キャパ、ストロークの途中保存の間隔、ブラシの配置間隔
 ofFbo::Settings PaintSettings::makeFboSettings() const {
 	if (width <= 0 || height <= 0) {
 		throw std::invalid_argument(

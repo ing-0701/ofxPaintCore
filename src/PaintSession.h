@@ -143,8 +143,10 @@ private:
     bool modified = false;
     bool previewDirty = false;
     bool previewReady = false;
-    paintcore::BrushSettings brushSettings { 0.1f, ofColor::black, true, 255.0f };
-    paintcore::BrushSettings activeBrush = brushSettings;
+	// 基本のブラシの設定
+	paintcore::BrushSettings brushSettings {}; // 描画中のブラシの設定
+	// 線の描画中にどんなUI操作をしてもそのストロークの一貫性を保つ
+	paintcore::BrushSettings activeBrush = brushSettings;
     ofColor background = ofColor::white;
     ofFbo opacityBuffer;
     CanvasRenderer::LayerPlacement layerPlacement;

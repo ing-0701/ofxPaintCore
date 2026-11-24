@@ -50,7 +50,8 @@ void PaintSession::beginStroke(const glm::vec2 & position) {
     previewReady = false;
 	strokeLayerId = selectedLayerId;
 	paintcore::Layer & layer = getLayer(strokeLayerId);
-	engine.beginStroke(position - layer.position, layer.canvas, paintSettings.spacingPx);
+
+	engine.beginStroke(position - layer.position, layer.canvas, activeBrush.spacingPx);
 }
 
 void PaintSession::addStrokePoint(const glm::vec2 & position) {
