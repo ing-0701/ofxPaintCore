@@ -9,6 +9,8 @@
 namespace paintcore {
 float brushRadius(float strokeSize);
 
+// 個々のブラシの設定
+// 太さ、色、ペンか消しゴムか、消しゴムの透明度、ブラシの角度、ブラシの間隔
 struct BrushSettings {
 	float size = 0.1f;
 	ofColor color = ofColor::black;
@@ -16,6 +18,7 @@ struct BrushSettings {
 	float eraserAlpha = 255.0f;
     float angleDegrees = 0.0f;
     float randomAngleDegrees = 0.0f;
+	float spacingPx = 3.0f;
 };
 
 struct StampInfo {
