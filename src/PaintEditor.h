@@ -30,20 +30,24 @@ public:
 
 	void setup() {
 		paint.setup();
+
 		const float x = paint.canvasWidth + 8.0f;
-		picker.setup(x, 0);
-		panel.setup("Brush", "", x, 290);
+
+		picker.setup(x, 20);
+
+		backgroundPicker.setup(x + 280.0f, 20);
+		backgroundPicker.setColor(paint.getBackground());
+
+		panel.setup("Brush", "", x, 320);
 
 		const auto & initialBrush = paint.getBrushSettings();
 
 		picker.setColor(initialBrush.color);
 		panel.add(pen.setup("Pen (off = eraser)", initialBrush.isPen));
-		panel.add(size.setup("Size", initialBrush.size, 0.05f, 1.0f));
-		panel.add(alpha.setup("Opacity", initialBrush.color.a / 255.0f, 0.01f, 1.0f));
-		panel.add(angle.setup("Angle (deg)", initialBrush.angleDegrees, -180.0f, 180.0f));
-		panel.add(randomAngle.setup("Random angle (+/- deg)", initialBrush.randomAngleDegrees, 0.0f, 180.0f));
-		panel.add(spacing.setup("Spacing (px)", initialBrush.spacingPx, 1.0f, 400.0f));
-		panel.add(background.setup("Background", ofColor::white, ofColor(0, 0), ofColor(255, 255)));
+		panel.add(size.setup("Pen size", initialBrush.size, 0.1f, 8.0f));
+		panel.add(alpha.setup("Pen opacity", initialBrush.color.a / 255.0f, 0.0f, 1.0f));
+		panel.add(eraserSize.setup("Eraser size", initialBrush.eraserSize, 0.1f, 8.0f));
+		panel.add(eraserAlpha.setup("Eraser opacity", initialBrush.eraserAlpha / 255.0f, 0.0f, 1.0f));
 		panel.add(undo.setup("Undo"));
 		panel.add(redo.setup("Redo"));
 		panel.add(clear.setup("Clear selected layer"));
@@ -72,14 +76,34 @@ public:
 	}
 	void draw() {
 		picker.update();
-		paint.setBackground(background);
+		backgroundPicker.update();
+
+		paint.setBackground(backgroundPicker.getColor());
+
 		view.begin();
 		paint.draw();
 		view.end();
+
+		ofPushStyle();
+		ofEnableAlphaBlending();
+		ofSetColor(255);
+
+		const float pickerX = paint.canvasWidth + 8.0f;
+
+		ofDrawBitmapString("Brush color", pickerX, 14);
+		ofDrawBitmapString("Background color", pickerX + 280.0f, 14);
+
 		picker.drawPicker();
 		picker.drawSelection();
 		picker.drawHueSlider();
+
+		backgroundPicker.drawPicker();
+		backgroundPicker.drawSelection();
+		backgroundPicker.drawHueSlider();
+
 		panel.draw();
+
+		ofPopStyle();
 		ofPushStyle();
 		const auto & layers = paint.engine.getLayers();
 		for (int i = 0; i < static_cast<int>(layers.size()) && i < visibleRows; ++i) {
@@ -98,8 +122,15 @@ public:
 	void mousePressed(int x, int y, int button) {
 		if (button != OF_MOUSE_BUTTON_LEFT || paint.isDrawing()) return;
 		picking = picker.contains(x, y);
+		pickingBackground = backgroundPicker.contains(x, y);
+
 		if (picking) {
 			picker.select(x, y);
+			return;
+		}
+
+		if (pickingBackground) {
+			backgroundPicker.select(x, y);
 			return;
 		}
 		const auto & layers = paint.engine.getLayers();
@@ -118,25 +149,33 @@ public:
 			alpha * 255.0f);
 
 		settings.isPen = pen;
-		settings.eraserAlpha = alpha * 255.0f;
-
-		settings.angleDegrees = angle;
-		settings.randomAngleDegrees = randomAngle;
-		settings.spacingPx = spacing;
+		settings.eraserSize = eraserSize;
+		settings.eraserAlpha = eraserAlpha * 255.0f;
 
 		paint.setBrushSettings(settings);
 		paint.pointerPressed(view.toCanvas({ x, y }));
 	}
 	void mouseDragged(int x, int y, int button) {
-		if (button != OF_MOUSE_BUTTON_LEFT) return;
-		if (picking)
+		if (button != OF_MOUSE_BUTTON_LEFT) {
+			return;
+		}
+
+		if (picking) {
 			picker.select(x, y);
-		else
+		} else if (pickingBackground) {
+			backgroundPicker.select(x, y);
+		} else {
 			paint.pointerDragged(view.toCanvas({ x, y }));
+		}
 	}
 	void mouseReleased(int, int, int button) {
-		if (button != OF_MOUSE_BUTTON_LEFT) return;
+		if (button != OF_MOUSE_BUTTON_LEFT) {
+			return;
+		}
+
 		picking = false;
+		pickingBackground = false;
+
 		paint.pointerReleased();
 	}
 	void mouseScrolled(float amount) {
@@ -150,17 +189,17 @@ public:
 	}
 
 private:
-	bool ready = false, picking = false;
+	bool ready = false;
+	bool picking = false;
+	bool pickingBackground = false;
 	int firstRow = 0;
 	static constexpr int visibleRows = 5;
 	ColorPicker picker;
+	ColorPicker backgroundPicker;
 	ofxPanel panel;
 	ofxToggle pen;
 	ofxFloatSlider size, alpha;
-	ofxFloatSlider angle;
-	ofxFloatSlider randomAngle;
-	ofxFloatSlider spacing;
-	ofxColorSlider background;
+	ofxFloatSlider eraserSize, eraserAlpha;
 	ofxButton undo, redo, clear, add, remove, up, down;
 	ofRectangle row(int i) const { return { paint.canvasWidth + 8.0f, panel.getPosition().y + panel.getHeight() + 4 + i * 24.0f, 256, 24 }; }
 	void onUndo() { paint.undo(); }

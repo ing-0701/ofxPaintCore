@@ -13,6 +13,7 @@ float brushRadius(float strokeSize);
 // 太さ、色、ペンか消しゴムか、消しゴムの透明度、ブラシの角度、ブラシの間隔
 struct BrushSettings {
 	float size = 0.1f;
+	float eraserSize = 0.1f;
 	ofColor color = ofColor::black;
 	bool isPen = true;
 	float eraserAlpha = 255.0f;

@@ -58,7 +58,9 @@ void Brush::draw(
 			GL_ZERO, GL_ONE_MINUS_SRC_ALPHA,
 			GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
 	}
-	const float radius = brushRadius(settings.size);
+	const float strokeSize = settings.isPen ? settings.size : settings.eraserSize;
+
+	const float radius = brushRadius(strokeSize);
 
 	for (std::size_t i = firstPoint; i < points.size(); i++) {
         if (detailedStamp) {
