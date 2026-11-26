@@ -6,7 +6,7 @@
 namespace paintcoreui {
 class ColorPicker {
 public:
-	void setup(float x, float y);
+	void setup(float x, float y, float displaySize = 256.0f);
 	void drawPicker();
 	void drawHueSlider();
 
@@ -15,6 +15,7 @@ public:
 	void pick(float x, float y);
 
 	ofColor getColor() const;
+	void setEnabled(bool enabled);
     void setColor(const ofColor& color);
     void select(float x, float y);
     void drawSelection() const;

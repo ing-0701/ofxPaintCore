@@ -46,18 +46,14 @@ paintcore::PaintSession paint(settings);
 |---|---|
 | ブラシ設定 | `setBrushSettings(settings)` |
 | 描画開始・継続・確定 | `pointerPressed(p)` / `pointerDragged(p)` / `pointerReleased()` |
-| 描画の取り消し | `cancelStroke()` |
 | レイヤー追加・選択・削除 | `addLayer()` / `selectLayer(id)` / `deleteLayer(id)` |
 | 並べ替え | `moveLayer(id, index)`。indexは移動後の位置 |
 | 履歴 | `undo()` / `redo()` / `canUndo()` / `canRedo()` |
 | 選択中レイヤーを空にする | `deleteAll()` |
 | 新規キャンバス | `newDocument()` |
 | 背景と表示 | `setBackground(color)` / `draw()` |
-| レイヤー属性 | `renameLayer` / `setLayerVisible` / `setLayerLocked` / `setLayerOpacity` / `setLayerPosition` |
-| プロジェクト保存 | `saveProject(path)` / `loadProject(path)` |
-| 合成PNG | `exportPng(path, transparent)` |
 
-初期レイヤーは1枚です。追加位置は選択中レイヤーの直前で、新規レイヤーが選択されます。配列の先頭が画面の手前です。最後の1枚は削除しません。描画中のUndo、レイヤー切替、追加、削除、属性変更は受け付けません。
+初期レイヤーは1枚です。追加位置は選択中レイヤーの直前で、新規レイヤーが選択されます。配列の先頭が画面の手前です。最後の1枚は削除しません。描画中のUndo、レイヤー切替、追加、削除は受け付けません。
 
 `pointerReleased()` はリリース位置を受け取りません。最後のドラッグまでに届いた点でプレビューを更新して確定します。描画が始まってから `draw()` が一度も呼ばれていなくても確定できます。ブラシ設定は描画開始時に固定されます。
 
@@ -73,7 +69,7 @@ int id = paint.addLayer(std::make_unique<MyLayerExtension>());
 
 レイヤーを削除すると、レイヤーと拡張オブジェクトの両方を履歴が所有します。Undoでは同じオブジェクトを戻します。独自パラメータやキャッシュの所有権をアプリ側で再構成する必要はありません。
 
-表示位置だけを毎フレーム変えたい場合は `setLayerPlacement(callback)` を使えます。コールバックはレイヤーの最終表示位置を返します。これは履歴に入りません。独自表示位置を使って編集する場合、入力位置の逆変換はアプリ側で対応させてください。通常のズーム・パンの座標変換には `CanvasView` を使えます。
+レイヤー位置や不透明度はPaintCoreのレイヤー属性としては管理しません。アプリ固有の配置が必要な場合は、表示・入力座標の変換をアプリ側で行います。通常のズーム・パンの座標変換には `CanvasView` を使えます。
 
 ## ブラシの差し替え
 
@@ -85,21 +81,9 @@ int id = paint.addLayer(std::make_unique<MyLayerExtension>());
 
 画像ブラシは `setImageStamp(std::shared_ptr<ofImage>)` で設定します。画像は透過PNGなどの通常の非乗算済みアルファを想定し、直径の正方形へ描画します。画像の寿命はshared_ptrで保持します。FBOから取得した乗算済み画像をそのまま同じ画像ブラシへ渡す用途とは区別してください。
 
-## 保存の範囲
-
-プロジェクトファイルはCBOR形式で、画像の浮動小数点32bit値、レイヤー順・ID・名前・位置・表示属性・背景を保持します。履歴やブラシ設定は保存しません。読み込み先のキャンバス寸法が一致しないファイルは拒否します。読み込みと拡張の生成が成功するまで、既存の作品と履歴を残します。読み込み成功時は履歴を空にします。
-
-独自拡張は `saveState()` で設定を返し、`loadProject(path, factory)` に復元用関数を渡します。未知の拡張を通常レイヤーとして黙って読み込むことはありません。保存は一時ファイルへ書いてから本体を置換します。
-
-PNGでは乗算済みRGBをアルファで割り、通常のPNGの形式へ変換します。PNG出力は8bitに丸められます。加算発光は透明PNGだけでは同じ合成を表現できないため、GlowingDrawingのGlow拡張は透明出力を拒否し、背景込みの出力を使用します。
-
-`hasUnsavedChanges()` は保存または読み込み成功後の変更を示します。Undoで保存時と完全に同じ状態へ戻ったことまでは比較しません。独自拡張のパラメータをアプリが変更した場合は `markDocumentChanged()` を呼びます。
-
-WebではこれらのファイルAPIはEmscriptenの仮想ファイルシステムへ書きます。ブラウザのダウンロードやサーバーへの送信はアプリ側の仕事です。
-
 ## 標準UIと導入
 
-`PaintEditor` はofxGuiを使う任意のUIです。ブラシ設定、色、背景、ペン／消しゴム、Undo/Redo、全消し、通常レイヤーの追加・削除・選択・上下移動を提供します。レイヤー一覧はスクロールでき、Ctrl+Z／Ctrl+Yを受け付けます。保存ボタンや独自フィルターの設定パネルは付属しません。
+`PaintEditor` はofxGuiを使う任意のUIです。ブラシ設定、色、背景、ペン／消しゴム、Undo/Redo、全消し、通常レイヤーの追加・削除・選択を提供します。レイヤー一覧はスクロールでき、Ctrl+ZでUndo、Ctrl+Shift+ZでRedoを実行します。保存ボタンや独自フィルターの設定パネルは付属しません。
 
 共通基盤はoFに依存します。React、GlowingDrawingのGlowFilter、FastAPI、録画・QRコードには依存しません。`addon_config.mk` のofxGui依存は付属ColorPickerと標準UIのためです。
 

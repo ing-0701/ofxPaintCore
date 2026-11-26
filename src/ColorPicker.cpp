@@ -2,18 +2,24 @@
 
 namespace paintcoreui {
 
-void ColorPicker::setup(float x, float y) {
-	pickerRect.set(x, y, SIZE, SIZE);
+void ColorPicker::setup(float x, float y, float displaySize) {
+	// 大きさが0以下になることを防ぐ
+	const float size = displaySize >= 1.0f ? displaySize : 1.0f;
+
+	pickerRect.set(x, y, size, size);
 
 	hue.setup("Hue", 0.0f, 0.0f, 1.0f);
-	hue.setSize(SIZE, 30);
-	hue.setPosition(x, y + SIZE + 2);
+	hue.setSize(size, 30);
+	hue.setPosition(x, y + size + 2);
 
+	// 色の画像の解像度は、表示サイズに関係なく256×256
 	pixels.allocate(SIZE, SIZE, OF_PIXELS_RGBA);
 	texture.allocate(pixels);
 
 	lastHue = -1.0f;
 	pickedColor = ofColor::black;
+	selection = { 0.0f, SIZE - 1.0f };
+
 	updateTexture();
 }
 
@@ -48,7 +54,11 @@ void ColorPicker::drawPicker() {
 
 	ofPushStyle();
 	ofSetColor(255);
-	texture.draw(pickerRect.x, pickerRect.y, SIZE, SIZE);
+	texture.draw(
+		pickerRect.x,
+		pickerRect.y,
+		pickerRect.width,
+		pickerRect.height);
 	ofPopStyle();
 }
 
@@ -57,13 +67,23 @@ void ColorPicker::drawHueSlider() {
 }
 
 void ColorPicker::select(float x, float y) {
+	// 画面上の位置を、256×256の色画像内の位置へ変換する
+	const float textureX = (x - pickerRect.x) * SIZE / pickerRect.width;
+
+	const float textureY = (y - pickerRect.y) * SIZE / pickerRect.height;
+
 	const int localX = static_cast<int>(
-		ofClamp(x - pickerRect.x, 0.0f, SIZE - 1.0f));
+		ofClamp(textureX, 0.0f, SIZE - 1.0f));
+
 	const int localY = static_cast<int>(
-		ofClamp(y - pickerRect.y, 0.0f, SIZE - 1.0f));
+		ofClamp(textureY, 0.0f, SIZE - 1.0f));
 
 	pickedColor = colorAt(localX, localY);
-    selection = { localX, localY };
+
+	selection = {
+		static_cast<float>(localX),
+		static_cast<float>(localY)
+	};
 }
 
 void ColorPicker::pick(float x, float y) {
@@ -72,7 +92,10 @@ void ColorPicker::pick(float x, float y) {
 }
 
 void ColorPicker::drawSelection() const {
-    const float localX = selection.x, localY = selection.y;
+	// 色画像内の位置を、画面上の位置へ戻す
+	const float localX = selection.x * pickerRect.width / SIZE;
+
+	const float localY = selection.y * pickerRect.height / SIZE;
 
 	// 選択位置に、現在の色を示す円を表示する
 	ofPushStyle();
@@ -97,6 +120,14 @@ void ColorPicker::drawSelection() const {
 
 ofColor ColorPicker::getColor() const {
 	return pickedColor;
+}
+
+void ColorPicker::setEnabled(bool enabled) {
+	if (enabled) {
+		hue.registerMouseEvents();
+	} else {
+		hue.unregisterMouseEvents();
+	}
 }
 
 void ColorPicker::setColor(const ofColor& color) {

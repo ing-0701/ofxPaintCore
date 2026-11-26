@@ -12,10 +12,6 @@ public:
 	const int id;
 	std::string name;
 	ofFbo canvas;
-    bool visible = true;
-    bool locked = false;
-    float opacity = 1.0f;
-    glm::vec2 position { 0.0f, 0.0f };
 
 	Layer(
 		int layerId,

@@ -1,6 +1,7 @@
 #pragma once
 
 // Optional native UI. PaintSession has no dependency on this class or React.
+#include "BrushControls.h"
 #include "CanvasView.h"
 #include "ColorPicker.h"
 #include "PaintSession.h"
@@ -23,56 +24,66 @@ public:
 		float minimumSize,
 		float maximumSize) {
 
-		size.setMin(minimumSize);
-		size.setMax(maximumSize);
-		size = ofClamp(initialSize, minimumSize, maximumSize);
+		brushControls.penSize.setMin(minimumSize);
+		brushControls.penSize.setMax(maximumSize);
+		brushControls.penSize = ofClamp(initialSize, minimumSize, maximumSize);
 	}
 
 	void setup() {
 		paint.setup();
 
 		const float x = paint.canvasWidth + 8.0f;
+		const float buttonY = 312.0f;
+		const float pickerY = buttonY + 34.0f;
 
 		picker.setup(x, 20);
 
-		backgroundPicker.setup(x + 280.0f, 20);
-		backgroundPicker.setColor(paint.getBackground());
+		backgroundButton.setup("Background");
+		backgroundButton.setSize(backgroundControlWidth, 30.0f);
+		backgroundButton.setPosition(x, buttonY);
 
-		panel.setup("Brush", "", x, 320);
+		panel.setup("Brush", "", x, 484);
 
 		const auto & initialBrush = paint.getBrushSettings();
 
 		picker.setColor(initialBrush.color);
 		panel.add(pen.setup("Pen (off = eraser)", initialBrush.isPen));
-		panel.add(size.setup("Pen size", initialBrush.size, 0.1f, 8.0f));
-		panel.add(alpha.setup("Pen opacity", initialBrush.color.a / 255.0f, 0.0f, 1.0f));
-		panel.add(eraserSize.setup("Eraser size", initialBrush.eraserSize, 0.1f, 8.0f));
-		panel.add(eraserAlpha.setup("Eraser opacity", initialBrush.eraserAlpha / 255.0f, 0.0f, 1.0f));
+		brushControls.setup(
+			x,
+			484.0f,
+			256.0f,
+			initialBrush,
+			0.1f,
+			8.0f,
+			0.0f,
+			1.0f);
+
+		panel.add(&brushControls.penSize);
+		panel.add(&brushControls.penAlpha);
+		panel.add(&brushControls.eraserSize);
+		panel.add(&brushControls.eraserAlpha);
 		panel.add(undo.setup("Undo"));
 		panel.add(redo.setup("Redo"));
 		panel.add(clear.setup("Clear selected layer"));
 		panel.add(add.setup("Add layer"));
 		panel.add(remove.setup("Delete selected layer"));
-		panel.add(up.setup("Layer up"));
-		panel.add(down.setup("Layer down"));
-		undo.addListener(this, &PaintEditor::onUndo);
-		redo.addListener(this, &PaintEditor::onRedo);
 		clear.addListener(this, &PaintEditor::onClear);
 		add.addListener(this, &PaintEditor::onAdd);
 		remove.addListener(this, &PaintEditor::onRemove);
-		up.addListener(this, &PaintEditor::onUp);
-		down.addListener(this, &PaintEditor::onDown);
+		backgroundButton.addListener(this, &PaintEditor::toggleBackgroundPicker);
+
+		backgroundPicker.setup(x, pickerY, backgroundControlWidth);
+		backgroundPicker.setColor(paint.getBackground());
+		backgroundPicker.setEnabled(false);
+
 		ready = true;
 	}
 	~PaintEditor() {
 		if (!ready) return;
-		undo.removeListener(this, &PaintEditor::onUndo);
-		redo.removeListener(this, &PaintEditor::onRedo);
 		clear.removeListener(this, &PaintEditor::onClear);
 		add.removeListener(this, &PaintEditor::onAdd);
 		remove.removeListener(this, &PaintEditor::onRemove);
-		up.removeListener(this, &PaintEditor::onUp);
-		down.removeListener(this, &PaintEditor::onDown);
+		backgroundButton.removeListener(this, &PaintEditor::toggleBackgroundPicker);
 	}
 	void draw() {
 		picker.update();
@@ -97,9 +108,12 @@ public:
 		picker.drawSelection();
 		picker.drawHueSlider();
 
-		backgroundPicker.drawPicker();
-		backgroundPicker.drawSelection();
-		backgroundPicker.drawHueSlider();
+		backgroundButton.draw();
+		if (backgroundPickerVisible) {
+			backgroundPicker.drawPicker();
+			backgroundPicker.drawSelection();
+			backgroundPicker.drawHueSlider();
+		}
 
 		panel.draw();
 
@@ -121,8 +135,9 @@ public:
 	}
 	void mousePressed(int x, int y, int button) {
 		if (button != OF_MOUSE_BUTTON_LEFT || paint.isDrawing()) return;
+
 		picking = picker.contains(x, y);
-		pickingBackground = backgroundPicker.contains(x, y);
+		pickingBackground = backgroundPickerVisible && backgroundPicker.contains(x, y);
 
 		if (picking) {
 			picker.select(x, y);
@@ -142,15 +157,10 @@ public:
 		if (x >= paint.canvasWidth) return; // UI owns this region.
 		auto settings = paint.getBrushSettings();
 
-		settings.size = size;
-
 		settings.color = picker.getColor();
-		settings.color.a = static_cast<unsigned char>(
-			alpha * 255.0f);
-
 		settings.isPen = pen;
-		settings.eraserSize = eraserSize;
-		settings.eraserAlpha = eraserAlpha * 255.0f;
+
+		brushControls.applyTo(settings);
 
 		paint.setBrushSettings(settings);
 		paint.pointerPressed(view.toCanvas({ x, y }));
@@ -184,8 +194,15 @@ public:
 	}
 	void keyPressed(int key) {
 		if (!ofGetKeyPressed(OF_KEY_CONTROL)) return;
-		if (key == 'z' || key == 26) paint.undo();
-		if (key == 'y' || key == 25) paint.redo();
+
+		const bool isZ = key == 'z' || key == 'Z' || key == 26;
+		if (!isZ) return;
+
+		if (ofGetKeyPressed(OF_KEY_SHIFT)) {
+			paint.redo();
+		} else {
+			paint.undo();
+		}
 	}
 
 private:
@@ -194,16 +211,17 @@ private:
 	bool pickingBackground = false;
 	int firstRow = 0;
 	static constexpr int visibleRows = 5;
+	bool backgroundPickerVisible = false;
+	float backgroundControlWidth = 100.0f;
+	ofxButton backgroundButton;
 	ColorPicker picker;
 	ColorPicker backgroundPicker;
 	ofxPanel panel;
 	ofxToggle pen;
-	ofxFloatSlider size, alpha;
-	ofxFloatSlider eraserSize, eraserAlpha;
-	ofxButton undo, redo, clear, add, remove, up, down;
+	BrushControls brushControls;
+	ofxButton undo, redo, clear, add, remove;
 	ofRectangle row(int i) const { return { paint.canvasWidth + 8.0f, panel.getPosition().y + panel.getHeight() + 4 + i * 24.0f, 256, 24 }; }
-	void onUndo() { paint.undo(); }
-	void onRedo() { paint.redo(); }
+
 	void onClear() { paint.deleteAll(); }
 	void onAdd() {
 		paint.addLayer();
@@ -213,7 +231,10 @@ private:
 		paint.deleteLayer(paint.getSelectedLayerId());
 		mouseScrolled(0);
 	}
-	void onUp() { paint.moveLayer(paint.getSelectedLayerId(), paint.findLayerIndex(paint.getSelectedLayerId()) - 1); }
-	void onDown() { paint.moveLayer(paint.getSelectedLayerId(), paint.findLayerIndex(paint.getSelectedLayerId()) + 1); }
+
+	void toggleBackgroundPicker() {
+		backgroundPickerVisible = !backgroundPickerVisible;
+		backgroundPicker.setEnabled(backgroundPickerVisible);
+	}
 };
 }

@@ -44,57 +44,43 @@ void PaintSession::setup(std::unique_ptr<LayerExtension> filter) {
 
 void PaintSession::beginStroke(const glm::vec2 & position) {
     if (!std::isfinite(position.x) || !std::isfinite(position.y)) return;
-    if (!initialized || isDrawing() || getLayer(selectedLayerId).locked || !getLayer(selectedLayerId).visible) return;
+	if (!initialized || isDrawing()) return;
     activeBrush = brushSettings;
     previewDirty = true;
     previewReady = false;
 	strokeLayerId = selectedLayerId;
 	paintcore::Layer & layer = getLayer(strokeLayerId);
 
-	engine.beginStroke(position - layer.position, layer.canvas, activeBrush.spacingPx);
+	engine.beginStroke(
+		position,
+		layer.canvas,
+		activeBrush.spacingPx);
 }
 
 void PaintSession::addStrokePoint(const glm::vec2 & position) {
     if (!isDrawing() || !std::isfinite(position.x) || !std::isfinite(position.y)) return;
-	engine.addStrokePoint(position - getLayer(strokeLayerId).position);
+	engine.addStrokePoint(position);
     previewDirty = true;
 }
 
 void PaintSession::drawCanvas(bool drawingFlag) {
-    if (isDrawing() && (!previewReady || previewDirty)) {
-        engine.drawStroke(activeBrush);
-        getExtension(strokeLayerId).markDirty();
-        previewReady = true;
-        previewDirty = false;
-    }
+	if (isDrawing() && (!previewReady || previewDirty)) {
+		engine.drawStroke(activeBrush);
+		getExtension(strokeLayerId).markDirty();
+
+		previewReady = true;
+		previewDirty = false;
+	}
+
 	const float time = ofGetElapsedTimef();
 	const int previewLayerId = drawingFlag ? strokeLayerId : 0;
 
-	// 第三引数はラムダ式
-	// 目的のレイヤーに対応するフィルターに応じて描画関数を呼ぶ
-	// thisは今回使いたいgetExtension()やdraw()を持つオブジェクト
-	// timeはこのdrawCanvas内で定義されたローカル変数なので明示が必要
 	paintcore::CanvasRenderer::draw(
 		engine,
 		previewLayerId,
 		[this, time](const paintcore::Layer & layer, ofFbo & source) {
-			if (!layer.visible || layer.opacity <= 0.0f) return;
-            if (layer.opacity == 1.0f) {
-                getExtension(layer.id).draw(source, time);
-            } else {
-                if (!opacityBuffer.isAllocated()) opacityBuffer.allocate(paintSettings.makeFboSettings());
-                opacityBuffer.begin();
-                ofClear(0, 0, 0, 0);
-                getExtension(layer.id).draw(source, time);
-                opacityBuffer.end();
-                ofEnableAlphaBlending();
-                glBlendEquation(GL_FUNC_ADD);
-                glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-                // All four channels are premultiplied by opacity.
-                ofSetColor(ofFloatColor(layer.opacity, layer.opacity, layer.opacity, layer.opacity));
-                opacityBuffer.draw(0, 0);
-            }
-		}, layerPlacement);
+			getExtension(layer.id).draw(source, time);
+		});
 }
 
 void PaintSession::storeLayerHistory(SessionHistoryEntry& entry, int layerIndex) {
@@ -202,7 +188,6 @@ void PaintSession::undo() {
 		return;
 	}
 
-    if (historyManager.canUndo()) modified = true;
 	historyManager.undo(*this);
 }
 
@@ -211,7 +196,6 @@ void PaintSession::redo() {
 		return;
 	}
 
-    if (historyManager.canRedo()) modified = true;
 	historyManager.redo(*this);
 }
 
@@ -221,7 +205,6 @@ void PaintSession::deleteAll() {
 	}
 
 	paintcore::Layer & layer = getLayer(selectedLayerId);
-    if (layer.locked) return;
 
     auto& entry = prepareHistory();
     entry.type = SessionHistoryType::CanvasEdit;
@@ -282,7 +265,6 @@ int PaintSession::addLayer(std::unique_ptr<LayerExtension> filter, bool recordHi
 	} else {
         // An unrecorded structural edit must not leave old actions targeting reused IDs.
         clearHistory();
-        modified = true;
     }
 
 	return id;
@@ -316,44 +298,22 @@ void PaintSession::commitStroke() {
 	strokeLayerId = 0;
 }
 
-namespace {
-class LambdaAction : public HistoryAction<PaintSession> {
-public:
-    std::function<void(PaintSession&)> backward, forward;
-    void undo(PaintSession& s) override { backward(s); }
-    void redo(PaintSession& s) override { forward(s); }
-};
-template<class T> void changeProperty(PaintSession& s, int id, T Layer::* member, const T& value) {
-    if (s.isDrawing() || s.findLayerIndex(id) < 0) return;
-    auto& layer = s.getLayer(id);
-    const T old = layer.*member;
-    if (old == value) return;
-    auto action = std::make_unique<LambdaAction>();
-    action->backward = [id, member, old](PaintSession& tool) { tool.getLayer(id).*member = old; };
-    action->forward = [id, member, value](PaintSession& tool) { tool.getLayer(id).*member = value; };
-    layer.*member = value;
-    s.recordAction(std::move(action));
-}
-}
-void PaintSession::moveLayer(int id, int index, bool recordHistory) {
-    if (isDrawing()) return;
-    const int old = findLayerIndex(id);
-    if (old < 0 || index < 0 || index >= static_cast<int>(engine.getLayers().size()) || old == index) return;
-    auto action = std::make_unique<LambdaAction>();
-    action->backward = [id, old](PaintSession& s) { s.engine.moveLayer(id, old); };
-    action->forward = [id, index](PaintSession& s) { s.engine.moveLayer(id, index); };
-    engine.moveLayer(id, index);
-    modified = true;
-    if (recordHistory) recordAction(std::move(action));
-}
-void PaintSession::renameLayer(int id, const std::string& name) { changeProperty(*this, id, &Layer::name, name); }
-void PaintSession::setLayerVisible(int id, bool value) { changeProperty(*this, id, &Layer::visible, value); }
-void PaintSession::setLayerLocked(int id, bool value) { changeProperty(*this, id, &Layer::locked, value); }
-void PaintSession::setLayerOpacity(int id, float value) {
-    if (std::isfinite(value)) changeProperty(*this, id, &Layer::opacity, ofClamp(value, 0.0f, 1.0f));
-}
-void PaintSession::setLayerPosition(int id, const glm::vec2& p) {
-    if (std::isfinite(p.x) && std::isfinite(p.y)) changeProperty(*this, id, &Layer::position, p);
+void PaintSession::moveLayer(int id, int index) {
+	if (isDrawing()) {
+		return;
+	}
+
+	const int oldIndex = findLayerIndex(id);
+	const int layerCount = static_cast<int>(engine.getLayers().size());
+
+	if (oldIndex < 0
+		|| index < 0
+		|| index >= layerCount
+		|| oldIndex == index) {
+		return;
+	}
+
+	engine.moveLayer(id, index);
 }
 
 void PaintSession::deleteLayer(int layerId) {
@@ -405,7 +365,6 @@ SessionHistoryEntry& PaintSession::prepareHistory() {
 
 void PaintSession::finishHistory() {
 	historyManager.finish();
-    modified = true;
 }
 
 void PaintSession::clearHistory() {
@@ -427,12 +386,6 @@ bool PaintSession::pointerPressed(const glm::vec2& p) {
 }
 void PaintSession::pointerDragged(const glm::vec2& p) { addStrokePoint(p); }
 void PaintSession::pointerReleased() { commitStroke(); }
-void PaintSession::cancelStroke() {
-    if (!isDrawing()) return;
-    getExtension(strokeLayerId).markDirty();
-    strokeLayerId = 0;
-    previewReady = previewDirty = false;
-}
 void PaintSession::draw() {
     ofPushStyle();
     ofFill();
@@ -451,7 +404,6 @@ void PaintSession::newDocument(std::unique_ptr<LayerExtension> extension) {
     if (!extension) extension = std::make_unique<LayerExtension>();
     extension->setup(canvasWidth, canvasHeight);
     extension->markDirty();
-    cancelStroke();
     clearHistory();
     while (!engine.getLayers().empty()) engine.takeLayerAt(0);
     extensions.clear();
@@ -459,7 +411,6 @@ void PaintSession::newDocument(std::unique_ptr<LayerExtension> extension) {
     extensions.emplace(1, std::move(extension));
     selectedLayerId = 1;
     nextLayerId = 2;
-    modified = true;
 }
 bool PaintSession::recordAction(std::unique_ptr<HistoryAction<PaintSession>> action) {
     if (!action || isDrawing()) return false;
