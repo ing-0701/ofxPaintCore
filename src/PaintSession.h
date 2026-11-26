@@ -84,21 +84,12 @@ public:
     bool pointerPressed(const glm::vec2& canvasPosition);
     void pointerDragged(const glm::vec2& canvasPosition);
     void pointerReleased();
-    void cancelStroke();
     void draw();
-    // A presentation-only placement (e.g. head-tracked parallax) does not enter history.
-    void setLayerPlacement(CanvasRenderer::LayerPlacement value) { layerPlacement = std::move(value); }
-    void setBackground(const ofColor& value) { if (background != value) { background = value; modified = true; } }
+	void setBackground(const ofColor & value) { background = value; }
     const ofColor& getBackground() const { return background; }
     void newDocument(std::unique_ptr<LayerExtension> initialExtension = {});
     // Record an app-specific action AFTER the app successfully applied it.
     bool recordAction(std::unique_ptr<paintcore::HistoryAction<PaintSession>> action);
-    using ExtensionFactory = std::function<std::unique_ptr<LayerExtension>(const ofJson&)>;
-    bool saveProject(const std::string& path);
-    bool loadProject(const std::string& path, const ExtensionFactory& factory = {});
-    bool exportPng(const std::string& path, bool transparent = true);
-    bool hasUnsavedChanges() const { return modified; }
-    void markDocumentChanged() { modified = true; }
 
 	// レイヤーIDから現在の配列位置を返す。見つからなければ-1。
 	int findLayerIndex(int layerId) const;
@@ -113,12 +104,7 @@ public:
 	int addLayer(std::unique_ptr<LayerExtension> extension = {}, bool recordHistory = true);
 
 	// 指定したレイヤーを、移動後の配列位置へ移す
-	void moveLayer(int layerId, int destinationIndex, bool recordHistory = true);
-    void renameLayer(int layerId, const std::string& name);
-    void setLayerVisible(int layerId, bool visible);
-    void setLayerLocked(int layerId, bool locked);
-    void setLayerOpacity(int layerId, float opacity);
-    void setLayerPosition(int layerId, const glm::vec2& position);
+	void moveLayer(int layerId, int destinationIndex);
 
 	void deleteLayer(int layerId);
 
@@ -140,7 +126,6 @@ private:
     int nextLayerId = 1;
     int strokeLayerId = 0;
     bool initialized = false;
-    bool modified = false;
     bool previewDirty = false;
     bool previewReady = false;
 	// 基本のブラシの設定
@@ -148,8 +133,6 @@ private:
 	// 線の描画中にどんなUI操作をしてもそのストロークの一貫性を保つ
 	paintcore::BrushSettings activeBrush = brushSettings;
     ofColor background = ofColor::white;
-    ofFbo opacityBuffer;
-    CanvasRenderer::LayerPlacement layerPlacement;
 	void storeLayerHistory(SessionHistoryEntry & entry, int layerIndex);
 	void restoreLayerFromHistory(SessionHistoryEntry & entry);
 	// idというキーを使ってフィルターを検索するための連想配列

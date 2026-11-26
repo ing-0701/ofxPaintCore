@@ -10,9 +10,6 @@ public:
     virtual ~LayerExtension() = default;
     virtual void setup(int width, int height) {}
     virtual void markDirty() {}
-    virtual ofJson saveState() const { return {{"type", "Normal"}}; }
-    // Additive light cannot in general be represented by a straight-alpha PNG.
-    virtual bool supportsTransparentExport() const { return true; }
     virtual void draw(ofFbo& source, float time) {
         CanvasRenderer::drawNormalImage(source);
     }
