@@ -11,7 +11,7 @@ public:
     void mouseDragged(int x, int y, int b) override { editor.mouseDragged(x,y,b); }
     void mouseReleased(int x, int y, int b) override { editor.mouseReleased(x,y,b); }
     void mouseScrolled(int x, int y, float sx, float sy) override {
-        if (x >= editor.paint.canvasWidth) editor.mouseScrolled(sy);
+        editor.mouseScrolled(sy);
     }
     void keyPressed(int key) override { editor.keyPressed(key); }
 };

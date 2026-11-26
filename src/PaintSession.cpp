@@ -397,21 +397,6 @@ void PaintSession::draw() {
     drawCanvas(isDrawing());
     ofPopStyle();
 }
-void PaintSession::newDocument(std::unique_ptr<LayerExtension> extension) {
-    if (!initialized) { setup(std::move(extension)); return; }
-    // Allocate replacement before discarding the current document.
-    auto layer = std::make_unique<Layer>(1, "Layer1", paintSettings);
-    if (!extension) extension = std::make_unique<LayerExtension>();
-    extension->setup(canvasWidth, canvasHeight);
-    extension->markDirty();
-    clearHistory();
-    while (!engine.getLayers().empty()) engine.takeLayerAt(0);
-    extensions.clear();
-    engine.insertLayerAt(0, std::move(layer));
-    extensions.emplace(1, std::move(extension));
-    selectedLayerId = 1;
-    nextLayerId = 2;
-}
 bool PaintSession::recordAction(std::unique_ptr<HistoryAction<PaintSession>> action) {
     if (!action || isDrawing()) return false;
     auto& entry = prepareHistory();

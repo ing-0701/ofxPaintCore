@@ -31,15 +31,39 @@ void Brush::setStamp(Stamp newStamp) {
 }
 
 void Brush::setDetailedStamp(DetailedStamp value) { detailedStamp = std::move(value); }
+
 void Brush::setImageStamp(std::shared_ptr<ofImage> image) {
-    if (!image || !image->isAllocated()) { setStamp({}); return; }
-    setDetailedStamp([image](const StampInfo& info) {
-        ofPushMatrix();
-        ofTranslate(info.position.x, info.position.y);
-        ofRotateDeg(info.angleDegrees);
-        image->draw(-info.radius, -info.radius, info.radius * 2, info.radius * 2);
-        ofPopMatrix();
-    });
+	if (!image || !image->isAllocated()
+		|| image->getWidth() <= 0.0f
+		|| image->getHeight() <= 0.0f) {
+		setStamp({});
+		return;
+	}
+
+	setDetailedStamp(
+		[image](const StampInfo & info) {
+			// 登録後に画像が解放・変更された場合にも備える。
+			if (!image->isAllocated()
+				|| image->getWidth() <= 0.0f
+				|| image->getHeight() <= 0.0f) {
+				return;
+			}
+
+			const float width = info.radius * 2.0f;
+			const float height = width * image->getHeight() / image->getWidth();
+
+			ofPushMatrix();
+			ofTranslate(info.position.x, info.position.y);
+			ofRotateDeg(info.angleDegrees);
+
+			image->draw(
+				-width * 0.5f,
+				-height * 0.5f,
+				width,
+				height);
+
+			ofPopMatrix();
+		});
 }
 
 // 設定されている色・太さ・不透明度でpointsに沿ってブラシを描画

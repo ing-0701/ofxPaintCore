@@ -87,7 +87,6 @@ public:
     void draw();
 	void setBackground(const ofColor & value) { background = value; }
     const ofColor& getBackground() const { return background; }
-    void newDocument(std::unique_ptr<LayerExtension> initialExtension = {});
     // Record an app-specific action AFTER the app successfully applied it.
     bool recordAction(std::unique_ptr<paintcore::HistoryAction<PaintSession>> action);
 

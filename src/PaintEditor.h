@@ -2,16 +2,29 @@
 
 // Optional native UI. PaintSession has no dependency on this class or React.
 #include "BrushControls.h"
-#include "CanvasView.h"
 #include "ColorPicker.h"
 #include "PaintSession.h"
 #include "ofxGui.h"
+#include "LayerList.h"
+#include <algorithm>
 
 namespace paintcoreui {
+
+struct PaintEditorLayout {
+	glm::vec2 colorPickerPosition { 0.0f, 0.0f };
+	glm::vec2 brushPanelPosition { 0.0f, 0.0f };
+	glm::vec2 backgroundButtonPosition { 0.0f, 0.0f };
+
+	// レイヤー欄全体の左上。
+	// この位置に追加ボタン、その下に削除ボタンと一覧を配置する。
+	glm::vec2 layerAreaPosition { 0.0f, 0.0f };
+	int visibleLayerRows = 5;
+	float backgroundWidth = 100.0f;
+};
+
 class PaintEditor {
 public:
 	paintcore::PaintSession paint;
-	paintcore::CanvasView view;
 	explicit PaintEditor(const paintcore::PaintSettings & settings = {})
 		: paint(settings) { }
 	PaintEditor(const PaintEditor &) = delete;
@@ -30,51 +43,107 @@ public:
 	}
 
 	void setup() {
-		paint.setup();
-
 		const float x = paint.canvasWidth + 8.0f;
-		const float buttonY = 312.0f;
-		const float pickerY = buttonY + 34.0f;
 
-		picker.setup(x, 20);
+		PaintEditorLayout defaultLayout;
+		defaultLayout.colorPickerPosition = { x, 20.0f };
+		defaultLayout.brushPanelPosition = { x, 484.0f };
+		defaultLayout.backgroundButtonPosition = { x, 312.0f };
+		defaultLayout.layerAreaPosition = {
+			x + controlWidth + 16.0f,
+			20.0f
+		};
 
-		backgroundButton.setup("Background");
-		backgroundButton.setSize(backgroundControlWidth, 30.0f);
-		backgroundButton.setPosition(x, buttonY);
+		setup(defaultLayout);
+	}
 
-		panel.setup("Brush", "", x, 484);
+	void setup(const PaintEditorLayout & initialLayout) {
+		// setupは初期化時に一度だけ行う。
+		if (ready) {
+			return;
+		}
+
+		layout = initialLayout;
+		visibleRows = std::max(1, layout.visibleLayerRows);
+		backgroundControlWidth = std::max(1.0f, layout.backgroundWidth);
+		paint.setup();
 
 		const auto & initialBrush = paint.getBrushSettings();
 
+		// ブラシ色
+		picker.setup(
+			layout.colorPickerPosition.x,
+			layout.colorPickerPosition.y,
+			controlWidth);
 		picker.setColor(initialBrush.color);
-		panel.add(pen.setup("Pen (off = eraser)", initialBrush.isPen));
+
+		// 背景色
+		backgroundButton.setup("Background");
+		backgroundButton.setSize(backgroundControlWidth, 30.0f);
+		backgroundButton.setPosition(
+			layout.backgroundButtonPosition.x,
+			layout.backgroundButtonPosition.y);
+
+		backgroundPicker.setup(
+			layout.backgroundButtonPosition.x,
+			layout.backgroundButtonPosition.y + 34.0f,
+			backgroundControlWidth);
+		backgroundPicker.setColor(paint.getBackground());
+
+		backgroundPickerVisible = false;
+		backgroundPicker.setEnabled(false);
+
+		// Brushパネル内の部品
+		panel.setup(
+			"Brush", "",
+			layout.brushPanelPosition.x,
+			layout.brushPanelPosition.y);
+
+		pen.setup("Pen (off = eraser)", initialBrush.isPen);
+
 		brushControls.setup(
-			x,
-			484.0f,
-			256.0f,
+			layout.brushPanelPosition.x,
+			layout.brushPanelPosition.y,
+			controlWidth,
 			initialBrush,
 			0.1f,
 			8.0f,
 			0.0f,
 			1.0f);
 
-		panel.add(&brushControls.penSize);
-		panel.add(&brushControls.penAlpha);
-		panel.add(&brushControls.eraserSize);
-		panel.add(&brushControls.eraserAlpha);
-		panel.add(undo.setup("Undo"));
-		panel.add(redo.setup("Redo"));
-		panel.add(clear.setup("Clear selected layer"));
-		panel.add(add.setup("Add layer"));
-		panel.add(remove.setup("Delete selected layer"));
+		undo.setup("Undo");
+		redo.setup("Redo");
+		clear.setup("Clear selected layer");
+
+		rebuildBrushPanel();
+
+		// レイヤー操作ボタンはBrushパネルへ追加しない。
+		const float layerX = layout.layerAreaPosition.x;
+		const float layerY = layout.layerAreaPosition.y;
+
+		add.setup("Add layer");
+		add.setSize(controlWidth, 30.0f);
+		add.setPosition(layerX, layerY);
+
+		remove.setup("Delete selected layer");
+		remove.setSize(controlWidth, 30.0f);
+		remove.setPosition(layerX, layerY + 34.0f);
+
+		layerList.setup(
+			layerX,
+			layerY + 68.0f,
+			controlWidth,
+			24.0f,
+			visibleRows);
+
+		// イベント登録
 		clear.addListener(this, &PaintEditor::onClear);
+		undo.addListener(this, &PaintEditor::onUndo);
+		redo.addListener(this, &PaintEditor::onRedo);
 		add.addListener(this, &PaintEditor::onAdd);
 		remove.addListener(this, &PaintEditor::onRemove);
-		backgroundButton.addListener(this, &PaintEditor::toggleBackgroundPicker);
-
-		backgroundPicker.setup(x, pickerY, backgroundControlWidth);
-		backgroundPicker.setColor(paint.getBackground());
-		backgroundPicker.setEnabled(false);
+		backgroundButton.addListener(
+			this, &PaintEditor::toggleBackgroundPicker);
 
 		ready = true;
 	}
@@ -84,25 +153,28 @@ public:
 		add.removeListener(this, &PaintEditor::onAdd);
 		remove.removeListener(this, &PaintEditor::onRemove);
 		backgroundButton.removeListener(this, &PaintEditor::toggleBackgroundPicker);
+		undo.removeListener(this, &PaintEditor::onUndo);
+		redo.removeListener(this, &PaintEditor::onRedo);
 	}
 	void draw() {
+		if (panelShowsPen != static_cast<bool>(pen)) {
+			rebuildBrushPanel();
+		}
 		picker.update();
 		backgroundPicker.update();
 
 		paint.setBackground(backgroundPicker.getColor());
 
-		view.begin();
 		paint.draw();
-		view.end();
 
 		ofPushStyle();
 		ofEnableAlphaBlending();
 		ofSetColor(255);
 
-		const float pickerX = paint.canvasWidth + 8.0f;
-
-		ofDrawBitmapString("Brush color", pickerX, 14);
-		ofDrawBitmapString("Background color", pickerX + 280.0f, 14);
+		ofDrawBitmapString(
+			"Brush color",
+			layout.colorPickerPosition.x,
+			layout.colorPickerPosition.y - 6.0f);
 
 		picker.drawPicker();
 		picker.drawSelection();
@@ -116,21 +188,45 @@ public:
 		}
 
 		panel.draw();
+		add.draw();
+		remove.draw();
 
 		ofPopStyle();
-		ofPushStyle();
+
 		const auto & layers = paint.engine.getLayers();
-		for (int i = 0; i < static_cast<int>(layers.size()) && i < visibleRows; ++i) {
-			const int index = firstRow + i;
-			if (index >= static_cast<int>(layers.size())) break;
+		const int layerCount = static_cast<int>(layers.size());
+
+		// 削除やUndo／Redoによって枚数が変わっても、表示位置を有効範囲に収める。
+		layerList.clampScroll(layerCount);
+
+		ofPushStyle();
+		ofFill();
+
+		// 行がない部分も含めた一覧の背景。
+		ofSetColor(40);
+		ofDrawRectangle(layerList.bounds());
+
+		for (int i = 0; i < visibleRows; ++i) {
+			const int index = layerList.firstVisibleIndex() + i;
+			if (index >= layerCount) {
+				break;
+			}
+
 			const auto & layer = *layers[index];
-			const auto rect = row(i);
-			ofFill();
-			ofSetColor(layer.id == paint.getSelectedLayerId() ? ofColor(70, 120, 180) : ofColor(60));
+			const auto rect = layerList.rowRect(i);
+			const bool selected = layer.id == paint.getSelectedLayerId();
+
+			ofSetColor(
+				selected ? ofColor(70, 120, 180) : ofColor(60));
 			ofDrawRectangle(rect);
+
 			ofSetColor(255);
-			ofDrawBitmapString(layer.name, rect.x + 6, rect.y + 17);
+			ofDrawBitmapString(
+				layer.name,
+				rect.x + 6.0f,
+				rect.y + 17.0f);
 		}
+
 		ofPopStyle();
 	}
 	void mousePressed(int x, int y, int button) {
@@ -149,12 +245,41 @@ public:
 			return;
 		}
 		const auto & layers = paint.engine.getLayers();
-		for (int i = 0; i < visibleRows && firstRow + i < static_cast<int>(layers.size()); ++i)
-			if (row(i).inside(x, y)) {
-				paint.selectLayer(layers[firstRow + i]->id);
-				return;
+		const int layerCount = static_cast<int>(layers.size());
+
+		layerList.clampScroll(layerCount);
+		layerList.cancelDrag();
+		draggingLayer = false;
+
+		if (layerList.bounds().inside(x, y)) {
+			for (int i = 0; i < visibleRows; ++i) {
+				const int index = layerList.firstVisibleIndex() + i;
+				if (index >= layerCount) {
+					break;
+				}
+
+				if (!layerList.rowRect(i).inside(x, y)) {
+					continue;
+				}
+
+				const int layerId = layers[index]->id;
+
+				if (paint.selectLayer(layerId)) {
+					layerList.beginDrag(layerId);
+					draggingLayer = true;
+				}
+
+				break;
 			}
-		if (x >= paint.canvasWidth) return; // UI owns this region.
+
+			// 一覧内の空白を押した場合も、描画処理には渡さない。
+			return;
+		}
+		if (containsUi(
+				static_cast<float>(x),
+				static_cast<float>(y))) {
+			return;
+		}
 		auto settings = paint.getBrushSettings();
 
 		settings.color = picker.getColor();
@@ -163,10 +288,15 @@ public:
 		brushControls.applyTo(settings);
 
 		paint.setBrushSettings(settings);
-		paint.pointerPressed(view.toCanvas({ x, y }));
+		paint.pointerPressed(
+			glm::vec2(static_cast<float>(x), static_cast<float>(y)));
 	}
 	void mouseDragged(int x, int y, int button) {
 		if (button != OF_MOUSE_BUTTON_LEFT) {
+			return;
+		}
+
+		if (draggingLayer) {
 			return;
 		}
 
@@ -175,10 +305,11 @@ public:
 		} else if (pickingBackground) {
 			backgroundPicker.select(x, y);
 		} else {
-			paint.pointerDragged(view.toCanvas({ x, y }));
+			paint.pointerDragged(
+				glm::vec2(static_cast<float>(x), static_cast<float>(y)));
 		}
 	}
-	void mouseReleased(int, int, int button) {
+	void mouseReleased(int x, int y, int button) {
 		if (button != OF_MOUSE_BUTTON_LEFT) {
 			return;
 		}
@@ -186,31 +317,70 @@ public:
 		picking = false;
 		pickingBackground = false;
 
+		if (draggingLayer) {
+			const int layerCount = static_cast<int>(paint.engine.getLayers().size());
+
+			const auto request = layerList.endDrag(x, y, layerCount);
+
+			draggingLayer = false;
+
+			if (request.layerId != 0
+				&& request.destinationIndex >= 0) {
+				paint.moveLayer(
+					request.layerId,
+					request.destinationIndex);
+			}
+
+			return;
+		}
+
 		paint.pointerReleased();
 	}
 	void mouseScrolled(float amount) {
-		const int maxRow = std::max(0, static_cast<int>(paint.engine.getLayers().size()) - visibleRows);
-		firstRow = std::max(0, std::min(maxRow, firstRow - static_cast<int>(amount)));
+		if (paint.isDrawing() || draggingLayer) {
+			return;
+		}
+
+		if (!layerList.bounds().inside(
+				ofGetMouseX(), ofGetMouseY())) {
+			return;
+		}
+
+		layerList.scroll(
+			amount,
+			static_cast<int>(paint.engine.getLayers().size()));
 	}
 	void keyPressed(int key) {
-		if (!ofGetKeyPressed(OF_KEY_CONTROL)) return;
+		if (!ofGetKeyPressed(OF_KEY_CONTROL)) {
+			return;
+		}
 
 		const bool isZ = key == 'z' || key == 'Z' || key == 26;
-		if (!isZ) return;
+
+		if (!isZ) {
+			return;
+		}
 
 		if (ofGetKeyPressed(OF_KEY_SHIFT)) {
-			paint.redo();
+			onRedo();
 		} else {
-			paint.undo();
+			onUndo();
 		}
 	}
 
 private:
 	bool ready = false;
+	PaintEditorLayout layout;
+
+	bool panelShowsPen = true;
+	static constexpr float controlWidth = 256.0f;
+
 	bool picking = false;
 	bool pickingBackground = false;
-	int firstRow = 0;
-	static constexpr int visibleRows = 5;
+	LayerList layerList;
+	bool draggingLayer = false;
+
+	int visibleRows = 5;
 	bool backgroundPickerVisible = false;
 	float backgroundControlWidth = 100.0f;
 	ofxButton backgroundButton;
@@ -220,21 +390,115 @@ private:
 	ofxToggle pen;
 	BrushControls brushControls;
 	ofxButton undo, redo, clear, add, remove;
-	ofRectangle row(int i) const { return { paint.canvasWidth + 8.0f, panel.getPosition().y + panel.getHeight() + 4 + i * 24.0f, 256, 24 }; }
 
+	bool containsUi(float x, float y) const {
+		if (picker.bounds().inside(x, y)) {
+			return true;
+		}
+
+		if (panel.getShape().inside(x, y)
+			|| backgroundButton.getShape().inside(x, y)
+			|| add.getShape().inside(x, y)
+			|| remove.getShape().inside(x, y)
+			|| layerList.bounds().inside(x, y)) {
+			return true;
+		}
+
+		if (backgroundPickerVisible
+			&& backgroundPicker.bounds().inside(x, y)) {
+			return true;
+		}
+
+		return false;
+	}
+
+	void rebuildBrushPanel() {
+		// 部品の値を保持したまま、パネルへの登録だけを組み直す。
+		panel.clear();
+		panel.setName("Brush");
+
+		// 非表示のスライダーが単独でマウス入力を受けないようにする。
+		brushControls.penSize.unregisterMouseEvents();
+		brushControls.penAlpha.unregisterMouseEvents();
+		brushControls.eraserSize.unregisterMouseEvents();
+		brushControls.eraserAlpha.unregisterMouseEvents();
+
+		panel.add(&pen);
+
+		panelShowsPen = static_cast<bool>(pen);
+
+		if (panelShowsPen) {
+			panel.add(&brushControls.penSize);
+			panel.add(&brushControls.penAlpha);
+		} else {
+			panel.add(&brushControls.eraserSize);
+			panel.add(&brushControls.eraserAlpha);
+		}
+
+		panel.add(&undo);
+		panel.add(&redo);
+		panel.add(&clear);
+
+		panel.setWidthElements(controlWidth);
+	}
+
+	void onUndo() {
+		if (draggingLayer || !paint.canUndo()) {
+			return;
+		}
+
+		paint.undo();
+
+		layerList.clampScroll(
+			static_cast<int>(paint.engine.getLayers().size()));
+	}
+
+	void onRedo() {
+		if (draggingLayer || !paint.canRedo()) {
+			return;
+		}
+
+		paint.redo();
+
+		layerList.clampScroll(
+			static_cast<int>(paint.engine.getLayers().size()));
+	}
 	void onClear() { paint.deleteAll(); }
 	void onAdd() {
+		if (paint.isDrawing()) {
+			return;
+		}
+
+		layerList.cancelDrag();
+		draggingLayer = false;
+
 		paint.addLayer();
-		firstRow = 0;
+
+		layerList.clampScroll(
+			static_cast<int>(paint.engine.getLayers().size()));
 	}
+
 	void onRemove() {
+		if (paint.isDrawing()) {
+			return;
+		}
+
+		layerList.cancelDrag();
+		draggingLayer = false;
+
 		paint.deleteLayer(paint.getSelectedLayerId());
-		mouseScrolled(0);
+
+		layerList.clampScroll(
+			static_cast<int>(paint.engine.getLayers().size()));
 	}
 
 	void toggleBackgroundPicker() {
 		backgroundPickerVisible = !backgroundPickerVisible;
 		backgroundPicker.setEnabled(backgroundPickerVisible);
+
+		if (!backgroundPickerVisible) {
+			pickingBackground = false;
+		}
 	}
 };
 }
