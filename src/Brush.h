@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <functional>
 #include <vector>
+#include <memory>
 
 namespace paintcore {
 float brushRadius(float strokeSize);
@@ -41,7 +42,10 @@ public:
 	void setStamp(Stamp newStamp);
     using DetailedStamp = std::function<void(const StampInfo&)>;
     void setDetailedStamp(DetailedStamp newStamp);
-    void setImageStamp(std::shared_ptr<ofImage> image);
+	// 画像の縦横比を保持して描画する。
+	// 描画幅はブラシの直径、高さは画像の縦横比から求める。
+	// 画像の寿命はshared_ptrで保持する。
+	void setImageStamp(std::shared_ptr<ofImage> image);
 
 	// 設定されている色・太さ・不透明度でpointsに沿ってブラシを描画
 	void draw(

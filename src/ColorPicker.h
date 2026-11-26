@@ -20,6 +20,14 @@ public:
     void select(float x, float y);
     void drawSelection() const;
     bool contains(float x, float y) const { return pickerRect.inside(x, y); }
+	// 色選択部分とHueスライダーを含む領域。
+	ofRectangle bounds() const {
+		return ofRectangle(
+			pickerRect.x,
+			pickerRect.y,
+			pickerRect.width,
+			pickerRect.height + 2.0f + hue.getHeight());
+	}
     void update();
 
 private:
